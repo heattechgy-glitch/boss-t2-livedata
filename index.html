@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Crypto Live Prices | BOSS</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+            color: #e2e8f0;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            width: 100%;
+        }
+
+        h1 {
+            text-align: center;
+            font-size: 2.5rem;
+            margin-bottom: 1rem;
+            background: linear-gradient(135deg, #0ea5e9 0%, #38bdf8 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .subtitle {
+            text-align: center;
+            color: #94a3b8;
+            margin-bottom: 3rem;
+            font-size: 1rem;
+        }
+
+        .cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 2rem;
+            margin-bottom: 2rem;
+        }
+
+        .card {
+            background: rgba(30, 41, 59, 0.8);
+            border: 1px solid rgba(14, 165, 233, 0.2);
+            border-radius: 16px;
+            padding: 2rem;
+            transition: all 0.3s ease;
+            backdrop-filter: blur(10px);
+        }
+
+        .card:hover {
+            transform: translateY(-4px);
+            border-color: rgba(14, 165, 233, 0.5);
+            box-shadow: 0 10px 30px rgba(14, 165, 233, 0.2);
+        }
+
+        .card-header {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .icon {
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+            font-weight: bold;
+            background: linear-gradient(135deg, #0ea5e9 0%, #38bdf8 100%);
+        }
+
+        .card-title {
+            font-size: 1.5rem;
+            font-weight: 600;
+            color: #f1f5f9;
+        }
+
+        .card-symbol {
+            font-size: 0.875rem;
+            color: #64748b;
+            text-transform: uppercase;
+        }
+
+        .price {
+            font-size: 2.5rem;
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+            color: #0ea5e9;
+        }
+
+        .change {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.5rem 1rem;
+            border-radius: 8px;
+            font-size: 1.125rem;
+            font-weight: 600;
+        }
+
+        .change.positive {
+            background: rgba(34, 197, 94, 0.1);
+            color: #22c55e;
+        }
+
+        .change.negative {
+            background: rgba(239, 68, 68, 0.1);
+            color: #ef4444;
+        }
+
+        .loading {
+            text-align: center;
+            color: #64748b;
+            font-size: 1rem;
+            padding: 2rem;
+        }
+
+        .error {
+            background: rgba(239, 68, 68, 0.1);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+            color: #ef4444;
+            padding: 1rem;
+            border-radius: 8px;
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+
+        .last-update {
+            text-align: center;
+            color: #64748b;
+            font-size: 0.875rem;
+        }
+
+        .pulse {
+            animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% {
+                opacity: 1;
+            }
+            50% {
+                opacity: 0.5;
+            }
+        }
+
+        @media (max-width: 768px) {
+            h1 {
+                font-size: 2rem;
+            }
+
+            .cards {
+                grid-template-columns: 1fr;
+                gap: 1.5rem;
+            }
+
+            .price {
+                font-size: 2rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🚀 Live Crypto Prices</h1>
+        <p class="subtitle">Real-time data from CoinGecko • Updates every 10 seconds</p>
+
+        <div id="error-container"></div>
+        
+        <div class="cards" id="cards-container">
+            <div class="loading pulse">Loading crypto data...</div>
+        </div>
+
+        <div class="last-update" id="last-update"></div>
+    </div>
+
+    <script>
+        const API_URL = 'https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum,solana&vs_currencies=usd&include_24hr_change=true';
+        const POLL_INTERVAL = 10000; // 10 seconds
+
+        const cryptoConfig = {
+            bitcoin: { name: 'Bitcoin', symbol: 'BTC', icon: '₿' },
+            ethereum: { name: 'Ethereum', symbol: 'ETH', icon: 'Ξ' },
+            solana: { name: 'Solana', symbol: 'SOL', icon: '◎' }
+        };
+
+        let pollTimer = null;
+
+        function formatPrice(price) {
+            return new Intl.NumberFormat('en-US', {
+                style: 'currency',
+                currency: 'USD',
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2
+            }).format(price);
+        }
+
+        function formatChange(change) {
+            const sign = change >= 0 ? '+' : '';
+            return `${sign}${change.toFixed(2)}%`;
+        }
+
+        function createCard(id, data) {
+            const config = cryptoConfig[id];
+            const change = data.usd_24h_change || 0;
+            const changeClass = change >= 0 ? 'positive' : 'negative';
+            const arrow = change >= 0 ? '▲' : '▼';
+
+            return `
+                <div class="card">
+                    <div class="card-header">
+                        <div class="icon">${config.icon}</div>
+                        <div>
+                            <div class="card-title">${config.name}</div>
+                            <div class="card-symbol">${config.symbol}</div>
+                        </div>
+                    </div>
+                    <div class="price">${formatPrice(data.usd)}</div>
+                    <div class="change ${changeClass}">
+                        <span>${arrow}</span>
+                        <span>${formatChange(change)}</span>
+                    </div>
+                </div>
+            `;
+        }
+
+        function showError(message) {
+            const errorContainer = document.getElementById('error-container');
+            errorContainer.innerHTML = `<div class="error">⚠️ ${message}</div>`;
+        }
+
+        function clearError() {
+            document.getElementById('error-container').innerHTML = '';
+        }
+
+        function updateLastUpdateTime() {
+            const now = new Date();
+            const timeString = now.toLocaleTimeString('en-US', { 
+                hour: '2-digit', 
+                minute: '2-digit', 
+                second: '2-digit' 
+            });
+            document.getElementById('last-update').textContent = `Last updated: ${timeString}`;
+        }
+
+        async function fetchCryptoData() {
+            try {
+                const response = await fetch(API_URL);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                const data = await response.json();
+                
+                clearError();
+
+                const cardsHTML = Object.keys(cryptoConfig)
+                    .map(id => createCard(id, data[id]))
+                    .join('');
+
+                document.getElementById('cards-container').innerHTML = cardsHTML;
+                updateLastUpdateTime();
+
+            } catch (error) {
+                console.error('Error fetching crypto data:', error);
+                showError('Failed to fetch crypto prices. Retrying...');
+            }
+        }
+
+        function startPolling() {
+            fetchCryptoData();
+            
+            if (pollTimer) {
+                clearInterval(pollTimer);
+            }
+            
+            pollTimer = setInterval(fetchCryptoData, POLL_INTERVAL);
+        }
+
+        // Start polling when page loads
+        window.addEventListener('DOMContentLoaded', startPolling);
+
+        // Clean up on page unload
+        window.addEventListener('beforeunload', () => {
+            if (pollTimer) {
+                clearInterval(pollTimer);
+            }
+        });
+
+        // Pause polling when tab is hidden, resume when visible
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden) {
+                if (pollTimer) {
+                    clearInterval(pollTimer);
+                }
+            } else {
+                startPolling();
+            }
+        });
+    </script>
+</body>
+</html>
